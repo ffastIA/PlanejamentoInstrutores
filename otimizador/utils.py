@@ -55,15 +55,16 @@ def calcular_meses_ativos(mes_inicio: int, duracao: int, meses_ferias: List[int]
 def calcular_janela_inicio(mes_inicio_projeto: int, mes_fim_projeto: int, duracao: int, meses_ferias: List[int],
                            num_meses: int, meses: List[str]) -> Tuple[int, int]:
     """Calcula a janela válida de início garantindo término dentro do prazo."""
-    inicio_min, inicio_max, janela_encontrada = mes_inicio_projeto, mes_inicio_projeto, False
+    inicio_min, inicio_max = -1, -1
     for m_inicio in range(mes_inicio_projeto, min(mes_fim_projeto + 1, num_meses)):
         meses_ativos = calcular_meses_ativos(m_inicio, duracao, meses_ferias, num_meses)
         if len(meses_ativos) == duracao and max(meses_ativos) <= mes_fim_projeto:
+            if inicio_min == -1: inicio_min = m_inicio
             inicio_max = m_inicio
-            janela_encontrada = True
-    if not janela_encontrada:
+
+    if inicio_min == -1:
         raise ValueError("Não há janela válida de início para um dos projetos. Verifique durações e prazos.")
-    print(f"   Janela válida: {meses[inicio_min]} a {meses[inicio_max]}")
+    print(f"   Janela de início calculada: {meses[inicio_min]} a {meses[inicio_max]}")
     return inicio_min, inicio_max
 
 
@@ -79,14 +80,14 @@ def converter_projetos_para_modelo(projetos_config: List[ConfiguracaoProjeto], m
     print("\n" + "=" * 80 + "\nCONVERSÃO DE PROJETOS PARA MODELO\n" + "=" * 80)
     projetos_modelo = []
     for config in projetos_config:
-        print(f"\nProcessando {config.nome}...")
+        print(f"\nProcessando {config.nome} (PROG: {config.percentual_prog:.1f}% / ROB: {config.percentual_rob:.1f}%)")
         config.mes_inicio_idx = data_para_indice_mes(config.data_inicio, meses)
         config.mes_termino_idx = data_para_indice_mes(config.data_termino, meses)
         inicio_min, inicio_max = calcular_janela_inicio(config.mes_inicio_idx, config.mes_termino_idx,
                                                         config.duracao_curso, meses_ferias, len(meses), meses)
 
-        prog_total, rob_total = (config.num_turmas, 0) if config.nome == 'DD1' else calcular_turmas_por_projeto(
-            config.num_turmas, parametros.percentual_prog)
+        prog_total, rob_total = calcular_turmas_por_projeto(config.num_turmas, config.percentual_prog)
+
         print(f"   Total: {config.num_turmas} turmas (PROG: {prog_total}, ROB: {rob_total}) | Ondas: {config.ondas}")
 
         if config.ondas == 1:
@@ -104,13 +105,13 @@ def converter_projetos_para_modelo(projetos_config: List[ConfiguracaoProjeto], m
                 projetos_modelo.append(
                     Projeto(nome_onda, prog_onda, rob_onda, config.duracao_curso, inicio_min, inicio_max,
                             config.mes_termino_idx))
-                print(f"   {nome_onda}: PROG={prog_onda}, ROB={rob_onda}")
+                print(f"   - {nome_onda}: {prog_onda} PROG, {rob_onda} ROB")
     print("=" * 80)
     return projetos_modelo
 
 
-def renumerar_instrutores_ativos(atribuicoes: List[Dict]) -> List[Dict]:
-    """Renumera apenas os instrutores que receberam turmas."""
+def renumerar_instrutores_ativos(atribuicoes: List[Dict]) -> Tuple[List[Dict], Dict[str, int]]:
+    """Renumera apenas os instrutores que receberam turmas e retorna a contagem por habilidade."""
     print("\n--- Renumerando Instrutores Ativos ---")
     instrutores_usados = sorted(list(set(atr['instrutor'] for atr in atribuicoes)),
                                 key=lambda i: (i.habilidade, int(i.id.split('_')[1])))
@@ -123,6 +124,11 @@ def renumerar_instrutores_ativos(atribuicoes: List[Dict]) -> List[Dict]:
         novo_id = f'{prefixo}_{contador_por_hab[hab]}'
         mapeamento[inst_antigo.id] = Instrutor(novo_id, hab, inst_antigo.capacidade, inst_antigo.laboratorio_id)
 
+    print("Contagem final de instrutores por habilidade:")
     for hab, count in sorted(contador_por_hab.items()): print(f"   • {hab}: {count} instrutores")
 
-    return [{'turma': atr['turma'], 'instrutor': mapeamento[atr['instrutor'].id]} for atr in atribuicoes]
+    atribuicoes_renumeradas = [{'turma': atr['turma'], 'instrutor': mapeamento[atr['instrutor'].id]} for atr in
+                               atribuicoes]
+
+    # <<< ALTERAÇÃO: Retorna tanto as atribuições quanto a contagem >>>
+    return atribuicoes_renumeradas, dict(contador_por_hab)

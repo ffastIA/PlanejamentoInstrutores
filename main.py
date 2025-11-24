@@ -16,7 +16,7 @@ def main():
     Função principal que executa todo o pipeline de otimização.
     """
     print("\n" + "=" * 80)
-    print("SISTEMA DE OTIMIZAÇÃO DE ALOCAÇÃO DE INSTRUTORES v2.3 (Modular)")
+    print("SISTEMA DE OTIMIZAÇÃO DE ALOCAÇÃO DE INSTRUTORES v2.4 (Modular)")
     print("=" * 80)
 
     try:
@@ -54,15 +54,15 @@ def main():
             sys.exit(1)
 
         # 4. Pós-processamento e Relatórios
-        resultados_estagio2['atribuicoes'] = renumerar_instrutores_ativos(resultados_estagio2['atribuicoes'])
+        # <<< ALTERAÇÃO: Capturando os dois valores retornados >>>
+        resultados_estagio2['atribuicoes'], contagem_instrutores_hab = renumerar_instrutores_ativos(
+            resultados_estagio2['atribuicoes'])
 
         print("\n" + "=" * 80 + "\nGERANDO VISUALIZAÇÕES E RELATÓRIOS\n" + "=" * 80)
 
-        # Gera os dataframes das planilhas, capturando o consolidado
-        spreadsheets.gerar_planilha_detalhada(resultados_estagio2['atribuicoes'], meses, meses_ferias_idx)
         df_consolidada_instrutor = spreadsheets.gerar_planilha_consolidada_instrutor(resultados_estagio2['atribuicoes'])
+        spreadsheets.gerar_planilha_detalhada(resultados_estagio2['atribuicoes'], meses, meses_ferias_idx)
 
-        # Gera os gráficos
         graficos = {
             'projeto_mes': plotting.gerar_grafico_turmas_projeto_mes(resultados_estagio2['turmas'], meses,
                                                                      meses_ferias_idx),
@@ -73,18 +73,17 @@ def main():
         graficos['prog_rob'], serie_temporal_df = plotting.gerar_grafico_demanda_prog_rob(resultados_estagio2['turmas'],
                                                                                           meses, meses_ferias_idx)
 
-        # <<< CORREÇÃO APLICADA AQUI >>>
-        # Gera o PDF final, passando todos os 6 argumentos necessários
+        # <<< ALTERAÇÃO: Passando a contagem de instrutores para o PDF >>>
         pdf_generator.gerar_relatorio_pdf(
             projetos_config,
             resultados_estagio1,
             resultados_estagio2,
             graficos,
             serie_temporal_df,
-            df_consolidada_instrutor  # Passando o dataframe que estava faltando
+            df_consolidada_instrutor,
+            contagem_instrutores_hab  # Novo argumento
         )
 
-        # Limpa os arquivos de imagem temporários
         for path in graficos.values():
             if path and os.path.exists(path): os.remove(path)
 

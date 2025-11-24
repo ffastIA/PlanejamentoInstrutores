@@ -1,7 +1,7 @@
 # ARQUIVO: otimizador/reporting/pdf_generator.py
 
 import os
-from pathlib import Path  # <<< Adicionado para lidar com caminhos de arquivo
+from pathlib import Path
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 import pandas as pd
@@ -15,32 +15,19 @@ class PDF(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.alias_nb_pages()
-        self.font_family = 'Helvetica'  # Define um fallback inicial
-        self.bullet = '-'  # Define um marcador de fallback
-
-        # <<< ALTERAÇÃO 1: Lógica para encontrar e carregar as fontes do projeto >>>
+        self.font_family = 'Helvetica'
+        self.bullet = '-'
         try:
-            # Constrói o caminho para a pasta de fontes dentro do projeto
-            # Path(__file__) é o caminho para este arquivo (pdf_generator.py)
-            # .parent.parent leva para a pasta 'otimizador'
             font_dir = Path(__file__).parent.parent / "assets/fonts"
-
-            # Registra as fontes usando o caminho completo
             self.add_font('DejaVu', '', font_dir / 'DejaVuSans.ttf')
             self.add_font('DejaVu', 'B', font_dir / 'DejaVuSans-Bold.ttf')
             self.add_font('DejaVu', 'I', font_dir / 'DejaVuSans-Italic.ttf')
-
             self.font_family = 'DejaVu'
             self.bullet = '•'
             print("[PDF] Fonte Unicode 'DejaVu' carregada com sucesso do projeto.")
-
-        # <<< ALTERAÇÃO 2: Capturando o erro correto >>>
         except FileNotFoundError:
-            # Este erro acontecerá se o usuário não seguir as instruções e os arquivos .ttf não estiverem na pasta.
-            print("\n[AVISO PDF] Arquivos de fonte (.ttf) não encontrados na pasta 'otimizador/assets/fonts/'.")
-            print("             Usando fonte básica (caracteres especiais podem não ser exibidos).")
-            print("             Por favor, siga as instruções para baixar e adicionar as fontes ao projeto.\n")
-            pass  # A execução continua usando Helvetica e '-' como marcador.
+            print("\n[AVISO PDF] Arquivos de fonte (.ttf) não encontrados. Usando fonte básica.\n")
+            pass
 
     def header(self):
         self.set_font(self.font_family, 'B', 16)
@@ -49,7 +36,6 @@ class PDF(FPDF):
         self.cell(0, 8, 'Planejamento de Alocação de Instrutores', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         self.ln(5)
 
-    # ... (o resto da classe PDF permanece exatamente o mesmo) ...
     def footer(self):
         self.set_y(-15)
         self.set_font(self.font_family, 'I', 8)
@@ -99,21 +85,20 @@ class PDF(FPDF):
         for _, row in df.head(max_rows).iterrows():
             for col in df.columns:
                 cell_text = str(row[col])
-                if len(cell_text) > 30:
-                    cell_text = cell_text[:27] + '...'
+                if len(cell_text) > 30: cell_text = cell_text[:27] + '...'
                 align = 'L' if isinstance(row[col], str) else 'R'
                 self.cell(col_widths[col], 6, cell_text, border=1, align=align)
             self.ln()
         if len(df) > max_rows: self.cell(0, 6, f"... (mostrando {max_rows} de {len(df)} linhas)", align='C')
 
 
-# A função gerar_relatorio_pdf permanece a mesma, mas agora usará o 'bullet' correto
 def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
                         resultados_estagio1: Dict,
                         resultados_estagio2: Dict,
                         graficos_paths: Dict,
                         serie_temporal_df: pd.DataFrame,
-                        df_consolidada_instrutor: pd.DataFrame):
+                        df_consolidada_instrutor: pd.DataFrame,
+                        contagem_instrutores_hab: Dict[str, int]):  # <<< Novo argumento
     """Gera o relatório executivo final em PDF."""
     print("\n--- Gerando Relatório Executivo PDF ---")
     pdf = PDF('P', 'mm', 'A4')
@@ -121,34 +106,41 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
 
     bullet = pdf.bullet
 
-    # 1. SUMÁRIO EXECUTIVO
+    # 1. SUMÁRIO EXECUTIVO - REFORMULADO
     pdf.chapter_title('1. Sumário Executivo (Principais Resultados)')
-    # ... (resto da função igual)
+
     total_instrutores = resultados_estagio2.get('total_instrutores_flex', 'N/A')
     spread = resultados_estagio2.get('spread_carga', 'N/A')
-    pico_max = resultados_estagio1.get('pico_max', 'N/A')
+    pico_prog = resultados_estagio1.get('pico_prog', 'N/A')
+    pico_rob = resultados_estagio1.get('pico_rob', 'N/A')
 
-    spread_interpretacao = ''
-    if isinstance(spread, int):
-        if spread <= 5:
-            spread_interpretacao = "Indica excelente balanceamento de carga de trabalho entre os instrutores."
-        elif spread <= 15:
-            spread_interpretacao = "Indica bom balanceamento, com pequenas variações na carga de trabalho."
-        else:
-            spread_interpretacao = "Indica desequilíbrio significativo, sugerindo revisão dos parâmetros."
-
+    # <<< ALTERAÇÃO: Métrica de Total de Instrutores e seu detalhamento >>>
     pdf.metric_box("Total de Instrutores Necessários", str(total_instrutores),
-                   "Número de profissionais a serem alocados para cobrir toda a demanda do projeto.")
-    pdf.metric_box("Balanceamento de Carga (Spread)", str(spread), spread_interpretacao)
-    pdf.metric_box("Pico Máximo de Demanda", f"{pico_max} Turmas/Mês",
-                   "Número máximo de turmas ativas simultaneamente em um único mês. Dimensiona a necessidade máxima de infraestrutura.")
+                   "Número total de profissionais a serem alocados para cobrir a demanda.")
 
-    # 2. PREMISSAS
-    pdf.chapter_title('2. Premissas e Parâmetros da Otimização')
+    count_prog = contagem_instrutores_hab.get('PROG', 0)
+    count_rob = contagem_instrutores_hab.get('ROBOTICA', 0)
+    pdf.set_font(pdf.font_family, 'B', 10)
+    pdf.cell(0, 6, "Detalhamento por Habilidade:", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font(pdf.font_family, '', 10)
+    pdf.multi_cell(0, 5, f"  {bullet} Instrutores de Programação: {count_prog}\n"
+                         f"  {bullet} Instrutores de Robótica: {count_rob}")
+    pdf.ln(5)
+
+    # <<< ALTERAÇÃO: Métricas de Pico de Demanda separadas >>>
+    pdf.metric_box("Pico de Demanda (Programação)", f"{pico_prog} Turmas/Mês",
+                   "Gargalo da operação: número máximo de instrutores de PROG necessários em um único mês.")
+    pdf.metric_box("Pico de Demanda (Robótica)", f"{pico_rob} Turmas/Mês",
+                   "Gargalo da operação: número máximo de instrutores de ROB necessários em um único mês.")
+
+    pdf.metric_box("Balanceamento de Carga (Spread)", str(spread),
+                   "Diferença entre o instrutor mais e menos sobrecarregado. Um valor baixo indica boa distribuição do trabalho.")
+
+    # 2. PREMISSAS GLOBAIS
+    pdf.chapter_title('2. Premissas Globais e Parâmetros da Otimização')
     params = resultados_estagio1.get('parametros')
     premissas_body = (
         f"{bullet} Capacidade Máxima por Instrutor: {params.capacidade_max_instrutor} turmas/mês\n"
-        f"{bullet} Proporção Alvo: {params.percentual_prog}% PROG / {params.percentual_rob}% ROB\n"
         f"{bullet} Spread Máximo Configurado: {params.spread_maximo} turmas\n"
         f"{bullet} Meses de Férias: {', '.join(params.meses_ferias)}"
     )
@@ -161,7 +153,8 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
         pdf.cell(0, 6, f"  {bullet} Projeto: {proj.nome}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_font(pdf.font_family, '', 10)
         pdf.multi_cell(0, 5, f"    - Período: {proj.data_inicio} a {proj.data_termino}\n"
-                             f"    - Turmas: {proj.num_turmas} | Duração: {proj.duracao_curso} meses | Ondas: {proj.ondas}")
+                             f"    - Turmas: {proj.num_turmas} | Duração: {proj.duracao_curso} meses | Ondas: {proj.ondas}\n"
+                             f"    - Proporção Alvo: {proj.percentual_prog:.1f}% PROG / {proj.percentual_rob:.1f}% ROB")
         pdf.ln(2)
 
     # 4. ANÁLISE GRÁFICA

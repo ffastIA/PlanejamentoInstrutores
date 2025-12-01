@@ -6,7 +6,8 @@ from datetime import datetime
 
 # Importações dos módulos
 from otimizador.io import user_input, config_manager
-from otimizador.utils import gerar_lista_meses, converter_projetos_para_modelo, renumerar_instrutores_ativos
+from otimizador.utils import gerar_lista_meses, converter_projetos_para_modelo, renumerar_instrutores_ativos, \
+    analisar_distribuicao_instrutores_por_projeto
 from otimizador.core import stage_1, stage_2
 from otimizador.reporting import plotting, spreadsheets, pdf_generator
 
@@ -16,7 +17,7 @@ def main():
     Função principal que executa todo o pipeline de otimização.
     """
     print("\n" + "=" * 80)
-    print("SISTEMA DE OTIMIZAÇÃO DE ALOCAÇÃO DE INSTRUTORES v2.4 (Modular)")
+    print("SISTEMA DE OTIMIZAÇÃO DE ALOCAÇÃO DE INSTRUTORES v2.5 (Modular)")
     print("=" * 80)
 
     try:
@@ -54,9 +55,10 @@ def main():
             sys.exit(1)
 
         # 4. Pós-processamento e Relatórios
-        # <<< ALTERAÇÃO: Capturando os dois valores retornados >>>
         resultados_estagio2['atribuicoes'], contagem_instrutores_hab = renumerar_instrutores_ativos(
             resultados_estagio2['atribuicoes'])
+
+        distribuicao_por_projeto = analisar_distribuicao_instrutores_por_projeto(resultados_estagio2['atribuicoes'])
 
         print("\n" + "=" * 80 + "\nGERANDO VISUALIZAÇÕES E RELATÓRIOS\n" + "=" * 80)
 
@@ -73,7 +75,6 @@ def main():
         graficos['prog_rob'], serie_temporal_df = plotting.gerar_grafico_demanda_prog_rob(resultados_estagio2['turmas'],
                                                                                           meses, meses_ferias_idx)
 
-        # <<< ALTERAÇÃO: Passando a contagem de instrutores para o PDF >>>
         pdf_generator.gerar_relatorio_pdf(
             projetos_config,
             resultados_estagio1,
@@ -81,7 +82,8 @@ def main():
             graficos,
             serie_temporal_df,
             df_consolidada_instrutor,
-            contagem_instrutores_hab  # Novo argumento
+            contagem_instrutores_hab,
+            distribuicao_por_projeto
         )
 
         for path in graficos.values():

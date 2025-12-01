@@ -130,5 +130,30 @@ def renumerar_instrutores_ativos(atribuicoes: List[Dict]) -> Tuple[List[Dict], D
     atribuicoes_renumeradas = [{'turma': atr['turma'], 'instrutor': mapeamento[atr['instrutor'].id]} for atr in
                                atribuicoes]
 
-    # <<< ALTERAÇÃO: Retorna tanto as atribuições quanto a contagem >>>
     return atribuicoes_renumeradas, dict(contador_por_hab)
+
+
+def analisar_distribuicao_instrutores_por_projeto(atribuicoes: List[Dict]) -> Dict[str, Dict[str, int]]:
+    """
+    Analisa as atribuições para contar quantos instrutores únicos de cada habilidade
+    foram alocados a cada projeto.
+    """
+    # Estrutura: { 'NomeProjeto': {'PROG': set_de_ids, 'ROBOTICA': set_de_ids} }
+    instrutores_vistos = defaultdict(lambda: defaultdict(set))
+
+    for atr in atribuicoes:
+        # Pega o nome base do projeto, mesmo que seja uma onda (ex: "DD2_Onda1" -> "DD2")
+        projeto_base_nome = atr['turma'].projeto.split('_Onda')[0]
+        instrutor = atr['instrutor']
+        # Adiciona o ID do instrutor ao set daquele projeto/habilidade
+        instrutores_vistos[projeto_base_nome][instrutor.habilidade].add(instrutor.id)
+
+    # Converte os sets para contagens (len)
+    contagem_final = {
+        proj: {
+            'PROG': len(hab_sets.get('PROG', set())),
+            'ROBOTICA': len(hab_sets.get('ROBOTICA', set()))
+        }
+        for proj, hab_sets in instrutores_vistos.items()
+    }
+    return contagem_final

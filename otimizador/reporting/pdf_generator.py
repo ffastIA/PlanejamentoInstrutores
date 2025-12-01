@@ -1,4 +1,4 @@
-# ARQUIVO: otimizador/reporting/pdf_generator.py
+# ARQUIVO: otimizador/reporting/pdf_generator.py (CORREÇÃO FINAL)
 
 import os
 from pathlib import Path
@@ -21,7 +21,7 @@ class PDF(FPDF):
             font_dir = Path(__file__).parent.parent / "assets/fonts"
             self.add_font('DejaVu', '', font_dir / 'DejaVuSans.ttf')
             self.add_font('DejaVu', 'B', font_dir / 'DejaVuSans-Bold.ttf')
-            self.add_font('DejaVu', 'I', font_dir / 'DejaVuSans-Italic.ttf')
+            self.add_font('DejaVu', 'I', font_dir / 'DejaVuSans-Oblique.ttf')
             self.font_family = 'DejaVu'
             self.bullet = '•'
             print("[PDF] Fonte Unicode 'DejaVu' carregada com sucesso do projeto.")
@@ -98,7 +98,8 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
                         graficos_paths: Dict,
                         serie_temporal_df: pd.DataFrame,
                         df_consolidada_instrutor: pd.DataFrame,
-                        contagem_instrutores_hab: Dict[str, int]):  # <<< Novo argumento
+                        contagem_instrutores_hab: Dict[str, int],
+                        distribuicao_por_projeto: Dict[str, Dict[str, int]]):
     """Gera o relatório executivo final em PDF."""
     print("\n--- Gerando Relatório Executivo PDF ---")
     pdf = PDF('P', 'mm', 'A4')
@@ -106,7 +107,7 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
 
     bullet = pdf.bullet
 
-    # 1. SUMÁRIO EXECUTIVO - REFORMULADO
+    # 1. SUMÁRIO EXECUTIVO
     pdf.chapter_title('1. Sumário Executivo (Principais Resultados)')
 
     total_instrutores = resultados_estagio2.get('total_instrutores_flex', 'N/A')
@@ -114,7 +115,6 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
     pico_prog = resultados_estagio1.get('pico_prog', 'N/A')
     pico_rob = resultados_estagio1.get('pico_rob', 'N/A')
 
-    # <<< ALTERAÇÃO: Métrica de Total de Instrutores e seu detalhamento >>>
     pdf.metric_box("Total de Instrutores Necessários", str(total_instrutores),
                    "Número total de profissionais a serem alocados para cobrir a demanda.")
 
@@ -127,7 +127,6 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
                          f"  {bullet} Instrutores de Robótica: {count_rob}")
     pdf.ln(5)
 
-    # <<< ALTERAÇÃO: Métricas de Pico de Demanda separadas >>>
     pdf.metric_box("Pico de Demanda (Programação)", f"{pico_prog} Turmas/Mês",
                    "Gargalo da operação: número máximo de instrutores de PROG necessários em um único mês.")
     pdf.metric_box("Pico de Demanda (Robótica)", f"{pico_rob} Turmas/Mês",
@@ -152,9 +151,28 @@ def gerar_relatorio_pdf(projetos_config: List[ConfiguracaoProjeto],
         pdf.set_font(pdf.font_family, 'B', 10)
         pdf.cell(0, 6, f"  {bullet} Projeto: {proj.nome}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_font(pdf.font_family, '', 10)
-        pdf.multi_cell(0, 5, f"    - Período: {proj.data_inicio} a {proj.data_termino}\n"
-                             f"    - Turmas: {proj.num_turmas} | Duração: {proj.duracao_curso} meses | Ondas: {proj.ondas}\n"
-                             f"    - Proporção Alvo: {proj.percentual_prog:.1f}% PROG / {proj.percentual_rob:.1f}% ROB")
+
+        # &lt;&lt;&lt; CORREÇÃO APLICADA: CONSTRUIR UMA ÚNICA STRING E FAZER UMA SÓ CHAMADA &lt;&lt;&lt;
+
+        # Inicia a string com os detalhes do projeto
+        project_details_body = (
+            f"    - Período: {proj.data_inicio} a {proj.data_termino}\n"
+            f"    - Turmas: {proj.num_turmas} | Duração: {proj.duracao_curso} meses | Ondas: {proj.ondas}\n"
+            f"    - Proporção Alvo: {proj.percentual_prog:.1f}% PROG / {proj.percentual_rob:.1f}% ROB"
+        )
+
+        # Busca a distribuição de instrutores para este projeto
+        distribuicao = distribuicao_por_projeto.get(proj.nome, {'PROG': 0, 'ROBOTICA': 0})
+        total_alocado = distribuicao['PROG'] + distribuicao['ROBOTICA']
+
+        # Se houver instrutores alocados, adiciona a linha de alocação à string
+        if total_alocado > 0:
+            alocacao_str = f"\n    - Alocação Resultante: {distribuicao['PROG']} PROG / {distribuicao['ROBOTICA']} ROB ({total_alocado} no total)"
+            project_details_body += alocacao_str
+
+        # Faz uma única chamada multi_cell com a string completa
+        pdf.multi_cell(0, 5, project_details_body)
+
         pdf.ln(2)
 
     # 4. ANÁLISE GRÁFICA

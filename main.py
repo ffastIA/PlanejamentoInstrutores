@@ -98,6 +98,10 @@ def main():
             parametros
         )
 
+        resultados_estagio1['periodo'] = f"{dt_min.strftime('%d/%m/%Y')} a {dt_max.strftime('%d/%m/%Y')}"
+        resultados_estagio1['meses_total'] = len(meses)
+
+
         if not resultados_estagio1:
             print("\n[ERRO] Falha no Estágio 1. Verifique as restrições do projeto.")
             sys.exit(1)
@@ -118,6 +122,8 @@ def main():
             meses_ferias_idx,
             parametros
         )
+
+        resultados_estagio2['spread_max_permitido'] = parametros.spread_maximo
 
         if not resultados_estagio2 or resultados_estagio2.get("status") == "falha":
             print("\n[ERRO] Falha no Estágio 2. Tente aumentar o spread ou o timeout.")
